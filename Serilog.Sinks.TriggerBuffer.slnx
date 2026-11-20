@@ -1,0 +1,8 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/Serilog.Sinks.TriggerBuffer/Serilog.Sinks.TriggerBuffer.csproj" />
+  </Folder>
+  <Folder Name="/test/">
+    <Project Path="test/Serilog.Sinks.TriggerBuffer.Tests/Serilog.Sinks.TriggerBuffer.Tests.csproj" />
+  </Folder>
+</Solution>
