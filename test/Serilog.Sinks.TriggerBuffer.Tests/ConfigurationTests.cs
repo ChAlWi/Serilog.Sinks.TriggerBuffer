@@ -146,7 +146,7 @@ public class ConfigurationTests
 
     private static string NewTargetName() => Guid.NewGuid().ToString("N");
 
-    private static IConfiguration FromJson(string json)
+    internal static IConfiguration FromJson(string json)
     {
         return new ConfigurationBuilder()
             .AddJsonStream(new MemoryStream(Encoding.UTF8.GetBytes(json)))
