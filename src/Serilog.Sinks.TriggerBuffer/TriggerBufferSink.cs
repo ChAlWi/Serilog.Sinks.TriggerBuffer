@@ -1,13 +1,16 @@
 using System;
 using System.Collections.Generic;
 using System.Threading;
+using System.Threading.Tasks;
 using Serilog.Core;
 using Serilog.Debugging;
 using Serilog.Events;
 
 namespace Serilog.Sinks.TriggerBuffer;
 
-internal sealed class TriggerBufferSink : ILogEventSink
+// The wrapper implements all optional Serilog sink interfaces on purpose. Serilog's Wrap helper then does not add its
+// own forwarding sink, and the target is closed exactly once, by this class.
+internal sealed class TriggerBufferSink : ILogEventSink, ISetLoggingFailureListener, IDisposable, IAsyncDisposable
 {
     private readonly ILogEventSink _target;
     private readonly TimeProvider _timeProvider;
@@ -15,8 +18,10 @@ internal sealed class TriggerBufferSink : ILogEventSink
     private readonly LogEventLevel _triggerLevel;
     private readonly int _maximumBufferCount;
     private readonly TimeSpan _maximumBufferAge;
+    private readonly bool _flushOnShutdown;
     private readonly object _gate = new();
     private readonly Queue<BufferedEvent> _buffer = new();
+    private bool _disposed;
 
     public TriggerBufferSink(
         ILogEventSink target,
@@ -24,7 +29,8 @@ internal sealed class TriggerBufferSink : ILogEventSink
         LogEventLevel bufferMinimumLevel,
         LogEventLevel triggerLevel,
         int maximumBufferCount,
-        TimeSpan maximumBufferAge)
+        TimeSpan maximumBufferAge,
+        bool flushOnShutdown)
     {
         _target = target;
         _timeProvider = timeProvider;
@@ -32,6 +38,7 @@ internal sealed class TriggerBufferSink : ILogEventSink
         _triggerLevel = triggerLevel;
         _maximumBufferCount = maximumBufferCount;
         _maximumBufferAge = maximumBufferAge;
+        _flushOnShutdown = flushOnShutdown;
     }
 
     public void Emit(LogEvent logEvent)
@@ -54,6 +61,11 @@ internal sealed class TriggerBufferSink : ILogEventSink
         // Intake and handover share one lock, so a block of events is never interleaved with another caller's events.
         lock (_gate)
         {
+            if (_disposed)
+            {
+                return;
+            }
+
             var now = _timeProvider.GetTimestamp();
             RemoveExpired(now);
 
@@ -68,12 +80,74 @@ internal sealed class TriggerBufferSink : ILogEventSink
                 return;
             }
 
-            while (_buffer.Count > 0)
+            HandOverBuffer();
+            TryEmit(logEvent);
+        }
+    }
+
+    public void SetFailureListener(ILoggingFailureListener failureListener)
+    {
+        (_target as ISetLoggingFailureListener)?.SetFailureListener(failureListener);
+    }
+
+    public void Dispose()
+    {
+        if (!StopAcceptingEvents())
+        {
+            return;
+        }
+
+        (_target as IDisposable)?.Dispose();
+    }
+
+    public async ValueTask DisposeAsync()
+    {
+        if (!StopAcceptingEvents())
+        {
+            return;
+        }
+
+        if (_target is IAsyncDisposable asyncDisposable)
+        {
+            await asyncDisposable.DisposeAsync().ConfigureAwait(false);
+        }
+        else
+        {
+            (_target as IDisposable)?.Dispose();
+        }
+    }
+
+    // Returns false if the sink was already stopped, so that the target is closed only once.
+    private bool StopAcceptingEvents()
+    {
+        lock (_gate)
+        {
+            if (_disposed)
             {
-                TryEmit(_buffer.Dequeue().Event);
+                return false;
             }
 
-            TryEmit(logEvent);
+            _disposed = true;
+
+            if (_flushOnShutdown)
+            {
+                RemoveExpired(_timeProvider.GetTimestamp());
+                HandOverBuffer();
+            }
+            else
+            {
+                _buffer.Clear();
+            }
+
+            return true;
+        }
+    }
+
+    private void HandOverBuffer()
+    {
+        while (_buffer.Count > 0)
+        {
+            TryEmit(_buffer.Dequeue().Event);
         }
     }
 

@@ -15,7 +15,8 @@ public static class TriggerBufferLoggerConfigurationExtensions
         LogEventLevel bufferMinimumLevel = LogEventLevel.Verbose,
         LogEventLevel triggerLevel = LogEventLevel.Error,
         int maximumBufferCount = 1000,
-        TimeSpan? maximumBufferAge = null)
+        TimeSpan? maximumBufferAge = null,
+        bool flushOnShutdown = false)
     {
         return loggerSinkConfiguration.TriggerBuffer(
             configureTarget,
@@ -23,7 +24,8 @@ public static class TriggerBufferLoggerConfigurationExtensions
             bufferMinimumLevel,
             triggerLevel,
             maximumBufferCount,
-            maximumBufferAge);
+            maximumBufferAge,
+            flushOnShutdown);
     }
 
     internal static LoggerConfiguration TriggerBuffer(
@@ -33,7 +35,8 @@ public static class TriggerBufferLoggerConfigurationExtensions
         LogEventLevel bufferMinimumLevel = LogEventLevel.Verbose,
         LogEventLevel triggerLevel = LogEventLevel.Error,
         int maximumBufferCount = 1000,
-        TimeSpan? maximumBufferAge = null)
+        TimeSpan? maximumBufferAge = null,
+        bool flushOnShutdown = false)
     {
         ArgumentNullException.ThrowIfNull(loggerSinkConfiguration);
         ArgumentNullException.ThrowIfNull(configureTarget);
@@ -57,7 +60,14 @@ public static class TriggerBufferLoggerConfigurationExtensions
         }
 
         var sink = LoggerSinkConfiguration.Wrap(
-            target => new TriggerBufferSink(target, timeProvider, bufferMinimumLevel, triggerLevel, maximumBufferCount, age),
+            target => new TriggerBufferSink(
+                target,
+                timeProvider,
+                bufferMinimumLevel,
+                triggerLevel,
+                maximumBufferCount,
+                age,
+                flushOnShutdown),
             configureTarget);
         return loggerSinkConfiguration.Sink(sink);
     }

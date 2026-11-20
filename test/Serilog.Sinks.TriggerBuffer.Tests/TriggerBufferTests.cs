@@ -396,6 +396,139 @@ public class TriggerBufferTests
     }
 
     [Fact]
+    public void Disposing_the_logger_discards_the_remaining_context_and_closes_the_target_once()
+    {
+        var target = new LifecycleSink();
+        var logger = new LoggerConfiguration()
+            .MinimumLevel.Verbose()
+            .WriteTo.TriggerBuffer(t => t.Sink(target))
+            .CreateLogger();
+        logger.Information("remaining context");
+
+        logger.Dispose();
+
+        target.Journal.ShouldBe([LifecycleSink.ClosedSync]);
+    }
+
+    [Fact]
+    public async Task Disposing_the_logger_asynchronously_closes_the_target_once_asynchronously()
+    {
+        var target = new LifecycleSink();
+        var logger = new LoggerConfiguration()
+            .MinimumLevel.Verbose()
+            .WriteTo.TriggerBuffer(t => t.Sink(target))
+            .CreateLogger();
+        logger.Information("remaining context");
+
+        await logger.DisposeAsync();
+
+        target.Journal.ShouldBe([LifecycleSink.ClosedAsync]);
+    }
+
+    [Fact]
+    public void Flush_on_shutdown_hands_over_the_remaining_context_before_the_target_is_closed()
+    {
+        var target = new LifecycleSink();
+        var logger = new LoggerConfiguration()
+            .MinimumLevel.Verbose()
+            .WriteTo.TriggerBuffer(t => t.Sink(target), flushOnShutdown: true)
+            .CreateLogger();
+        logger.Information("context 1");
+        logger.Information("context 2");
+
+        logger.Dispose();
+
+        target.Journal.ShouldBe(["context 1", "context 2", LifecycleSink.ClosedSync]);
+    }
+
+    [Fact]
+    public async Task Flush_on_shutdown_also_applies_to_asynchronous_disposal()
+    {
+        var target = new LifecycleSink();
+        var logger = new LoggerConfiguration()
+            .MinimumLevel.Verbose()
+            .WriteTo.TriggerBuffer(t => t.Sink(target), flushOnShutdown: true)
+            .CreateLogger();
+        logger.Information("context");
+
+        await logger.DisposeAsync();
+
+        target.Journal.ShouldBe(["context", LifecycleSink.ClosedAsync]);
+    }
+
+    [Fact]
+    public void Flush_on_shutdown_hands_over_only_context_that_is_still_valid()
+    {
+        var target = new LifecycleSink();
+        var clock = new ManualTimeProvider();
+        var logger = new LoggerConfiguration()
+            .MinimumLevel.Verbose()
+            .WriteTo.TriggerBuffer(
+                t => t.Sink(target),
+                clock,
+                maximumBufferAge: TimeSpan.FromSeconds(10),
+                flushOnShutdown: true)
+            .CreateLogger();
+        logger.Information("expired");
+        clock.Advance(TimeSpan.FromSeconds(11));
+        logger.Information("valid");
+
+        logger.Dispose();
+
+        target.Journal.ShouldBe(["valid", LifecycleSink.ClosedSync]);
+    }
+
+    [Fact]
+    public void The_target_is_closed_even_if_handing_over_the_remaining_context_fails()
+    {
+        var target = new FailingLifecycleSink(failOn: "context");
+        using var selfLog = new SelfLogCapture();
+        var logger = new LoggerConfiguration()
+            .MinimumLevel.Verbose()
+            .WriteTo.TriggerBuffer(t => t.Sink(target), flushOnShutdown: true)
+            .CreateLogger();
+        logger.Information("context");
+
+        Should.NotThrow(() => logger.Dispose());
+
+        target.Journal.ShouldBe([LifecycleSink.ClosedSync]);
+        selfLog.Messages.ShouldContain(message => message.Contains("TriggerBuffer"));
+    }
+
+    [Fact]
+    public async Task Disposing_repeatedly_closes_the_target_only_once()
+    {
+        var target = new LifecycleSink();
+        var logger = new LoggerConfiguration()
+            .MinimumLevel.Verbose()
+            .WriteTo.TriggerBuffer(t => t.Sink(target))
+            .CreateLogger();
+
+        logger.Dispose();
+        logger.Dispose();
+        await logger.DisposeAsync();
+
+        target.Journal.ShouldBe([LifecycleSink.ClosedSync]);
+    }
+
+    [Fact]
+    public void Events_logged_after_disposal_are_not_handed_over()
+    {
+        var target = new LifecycleSink();
+        var logger = new LoggerConfiguration()
+            .MinimumLevel.Verbose()
+            .WriteTo.TriggerBuffer(t => t.Sink(target), flushOnShutdown: true)
+            .CreateLogger();
+        logger.Information("context");
+        logger.Dispose();
+
+        logger.Information("late context");
+        logger.Error("late trigger");
+
+        target.Journal.ShouldBe(["context", LifecycleSink.ClosedSync]);
+    }
+
+    [Fact]
     public void A_missing_target_configuration_is_rejected()
     {
         // The null literal is intentional: it is the invalid input under test.
