@@ -10,4 +10,8 @@
     <PackageReference Include="Serilog" />
   </ItemGroup>
 
+  <ItemGroup>
+    <InternalsVisibleTo Include="Serilog.Sinks.TriggerBuffer.Tests" />
+  </ItemGroup>
+
 </Project>
