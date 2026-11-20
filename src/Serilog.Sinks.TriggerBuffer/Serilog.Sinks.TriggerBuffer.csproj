@@ -1,0 +1,17 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+    <PackageId>Serilog.Sinks.TriggerBuffer</PackageId>
+    <Description>Buffers recent log events and forwards them to a target sink when a trigger level is reached.</Description>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Serilog" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <InternalsVisibleTo Include="Serilog.Sinks.TriggerBuffer.Tests" />
+  </ItemGroup>
+
+</Project>
