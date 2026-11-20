@@ -8,8 +8,9 @@
 This project is a Serilog sink (`ILogEventSink`). It needs the types `LogEvent`, `ILogEventSink`,
 `LoggerSinkConfiguration` and `LogEventLevel`, which live in the `Serilog` package.
 
-Target framework of the library: `netstandard2.0`. Moving to `net10.0` (or multi-targeting) is only done if a
-concrete blocker appears.
+Target framework of the library: `net8.0`. The product requirements ask for consumers on .NET 8 and newer and
+exclude .NET Framework, so `netstandard2.0` would add polyfills and extra packages without a benefit. A `net8.0`
+library also runs in .NET 9 and 10 applications.
 
 ## Alternatives
 
@@ -24,13 +25,13 @@ concrete blocker appears.
 Use `Serilog` (alternative 1).
 
 - The version is pinned centrally in `Directory.Packages.props`.
-- The minimum version must support `netstandard2.0`. A low minimum version lets consumers use more Serilog versions.
+- The minimum version must support `net8.0`. A low minimum version lets consumers use more Serilog versions.
 
 ## Consequences
 
 - A single runtime dependency in the library.
 - NuGet license field of Serilog 4.4.0 confirmed: Apache-2.0.
-- Transitive dependencies on `netstandard2.0` (from the nuspec): `System.Diagnostics.DiagnosticSource` 8.0.1 and
-  `System.Threading.Channels` 8.0.0 (both Microsoft, MIT). They are unavoidable while Serilog is consumed via
-  `netstandard2.0` and come with the Serilog package. Switching to `net10.0` would remove them, because Serilog
-  pulls no additional packages there.
+- On `net8.0` the Serilog 4.4.0 package has no further package dependencies (checked in the nuspec). Only the
+  `netstandard2.0` and .NET Framework assets pull `System.Diagnostics.DiagnosticSource` and
+  `System.Threading.Channels`, which is one of the reasons for targeting `net8.0`.
+- `TimeProvider` and `IAsyncDisposable` are part of .NET 8, so no polyfill package is needed (see ADR 0003).

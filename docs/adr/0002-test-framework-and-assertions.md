@@ -5,7 +5,7 @@
 
 ## Context
 
-Tests run on `net10.0` (a test project cannot target `netstandard2.0`). We need a test framework, a test host and an
+Tests run on `net10.0`, the library under test targets `net8.0`. We need a test framework, a test host and an
 assertion library. Commercially licensed libraries are excluded (precedent: FluentAssertions from v8 on).
 
 ## A. Test framework
