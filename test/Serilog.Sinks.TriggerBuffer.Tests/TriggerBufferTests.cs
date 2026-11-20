@@ -198,4 +198,94 @@ public class TriggerBufferTests
 
         target.Messages.ShouldBe(["context", "first trigger", "second trigger"]);
     }
+
+    [Fact]
+    public void A_failing_target_does_not_stop_the_remaining_events_and_is_reported_through_selflog()
+    {
+        var target = new FailingSink(message => message == "context 2");
+        using var selfLog = new SelfLogCapture();
+        using var logger = new LoggerConfiguration()
+            .MinimumLevel.Verbose()
+            .WriteTo.TriggerBuffer(t => t.Sink(target))
+            .CreateLogger();
+
+        logger.Information("context 1");
+        logger.Information("context 2");
+        logger.Information("context 3");
+        Should.NotThrow(() => logger.Error("trigger"));
+
+        target.Messages.ShouldBe(["context 1", "context 3", "trigger"]);
+        selfLog.Messages.ShouldContain(message => message.Contains("TriggerBuffer"));
+    }
+
+    [Fact]
+    public void A_failing_trigger_is_not_retried_and_the_taken_context_is_not_forwarded_again()
+    {
+        var target = new FailingSink(message => message == "first trigger");
+        using var selfLog = new SelfLogCapture();
+        using var logger = new LoggerConfiguration()
+            .MinimumLevel.Verbose()
+            .WriteTo.TriggerBuffer(t => t.Sink(target))
+            .CreateLogger();
+
+        logger.Information("context");
+        Should.NotThrow(() => logger.Error("first trigger"));
+        logger.Error("second trigger");
+
+        target.Messages.ShouldBe(["context", "second trigger"]);
+        selfLog.Messages.ShouldContain(message => message.Contains("TriggerBuffer"));
+    }
+
+    [Theory]
+    [InlineData(0)]
+    [InlineData(-1)]
+    public void A_non_positive_maximum_count_is_rejected(int maximumBufferCount)
+    {
+        Should.Throw<ArgumentOutOfRangeException>(() => new LoggerConfiguration()
+            .WriteTo.TriggerBuffer(t => t.Sink(new CollectingSink()), maximumBufferCount: maximumBufferCount));
+    }
+
+    [Theory]
+    [InlineData(0)]
+    [InlineData(-1)]
+    public void A_non_positive_maximum_age_is_rejected(int seconds)
+    {
+        Should.Throw<ArgumentOutOfRangeException>(() => new LoggerConfiguration()
+            .WriteTo.TriggerBuffer(t => t.Sink(new CollectingSink()), maximumBufferAge: TimeSpan.FromSeconds(seconds)));
+    }
+
+    [Fact]
+    public void A_buffer_minimum_level_above_the_trigger_level_is_rejected()
+    {
+        Should.Throw<ArgumentException>(() => new LoggerConfiguration()
+            .WriteTo.TriggerBuffer(
+                t => t.Sink(new CollectingSink()),
+                bufferMinimumLevel: LogEventLevel.Fatal,
+                triggerLevel: LogEventLevel.Error));
+    }
+
+    [Fact]
+    public void Equal_buffer_minimum_and_trigger_levels_are_allowed_and_leave_no_context_range()
+    {
+        var target = new CollectingSink();
+        using var logger = new LoggerConfiguration()
+            .MinimumLevel.Verbose()
+            .WriteTo.TriggerBuffer(
+                t => t.Sink(target),
+                bufferMinimumLevel: LogEventLevel.Error,
+                triggerLevel: LogEventLevel.Error)
+            .CreateLogger();
+
+        logger.Warning("dropped");
+        logger.Error("trigger");
+
+        target.Messages.ShouldBe(["trigger"]);
+    }
+
+    [Fact]
+    public void A_missing_target_configuration_is_rejected()
+    {
+        // The null literal is intentional: it is the invalid input under test.
+        Should.Throw<ArgumentNullException>(() => new LoggerConfiguration().WriteTo.TriggerBuffer(null!));
+    }
 }

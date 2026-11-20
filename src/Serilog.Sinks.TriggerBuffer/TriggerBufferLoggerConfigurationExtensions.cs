@@ -38,8 +38,24 @@ public static class TriggerBufferLoggerConfigurationExtensions
         ArgumentNullException.ThrowIfNull(loggerSinkConfiguration);
         ArgumentNullException.ThrowIfNull(configureTarget);
         ArgumentNullException.ThrowIfNull(timeProvider);
+        ArgumentOutOfRangeException.ThrowIfLessThan(maximumBufferCount, 1);
+
+        if (bufferMinimumLevel > triggerLevel)
+        {
+            throw new ArgumentException(
+                "The buffer minimum level must not be above the trigger level.",
+                nameof(bufferMinimumLevel));
+        }
 
         var age = maximumBufferAge ?? DefaultMaximumBufferAge;
+        if (age <= TimeSpan.Zero)
+        {
+            throw new ArgumentOutOfRangeException(
+                nameof(maximumBufferAge),
+                age,
+                "The maximum buffer age must be greater than zero.");
+        }
+
         var sink = LoggerSinkConfiguration.Wrap(
             target => new TriggerBufferSink(target, timeProvider, bufferMinimumLevel, triggerLevel, maximumBufferCount, age),
             configureTarget);

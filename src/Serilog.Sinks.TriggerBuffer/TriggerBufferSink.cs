@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using Serilog.Core;
+using Serilog.Debugging;
 using Serilog.Events;
 
 namespace Serilog.Sinks.TriggerBuffer;
@@ -54,10 +55,26 @@ internal sealed class TriggerBufferSink : ILogEventSink
 
         while (_buffer.Count > 0)
         {
-            _target.Emit(_buffer.Dequeue().Event);
+            TryEmit(_buffer.Dequeue().Event);
         }
 
-        _target.Emit(logEvent);
+        TryEmit(logEvent);
+    }
+
+    private void TryEmit(LogEvent logEvent)
+    {
+        try
+        {
+            _target.Emit(logEvent);
+        }
+        catch (Exception exception)
+        {
+            // Report the failure without repeating the event payload, and keep delivering the rest of the block.
+            SelfLog.WriteLine(
+                "TriggerBuffer: the target sink failed to accept a {0} event: {1}",
+                logEvent.Level,
+                exception);
+        }
     }
 
     private void RemoveExpired(long now)
