@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Threading;
 using Serilog.Core;
 using Serilog.Debugging;
 using Serilog.Events;
@@ -14,6 +15,7 @@ internal sealed class TriggerBufferSink : ILogEventSink
     private readonly LogEventLevel _triggerLevel;
     private readonly int _maximumBufferCount;
     private readonly TimeSpan _maximumBufferAge;
+    private readonly object _gate = new();
     private readonly Queue<BufferedEvent> _buffer = new();
 
     public TriggerBufferSink(
@@ -34,31 +36,45 @@ internal sealed class TriggerBufferSink : ILogEventSink
 
     public void Emit(LogEvent logEvent)
     {
+        // The lock is entered by this thread only while the target is being called. An event that comes back
+        // into this sink from there would change the block that is being handed over, so it is not accepted.
+        if (Monitor.IsEntered(_gate))
+        {
+            SelfLog.WriteLine(
+                "TriggerBuffer: a {0} event was logged back into the sink from its target sink and was ignored",
+                logEvent.Level);
+            return;
+        }
+
         if (logEvent.Level < _bufferMinimumLevel)
         {
             return;
         }
 
-        var now = _timeProvider.GetTimestamp();
-        RemoveExpired(now);
-
-        if (logEvent.Level < _triggerLevel)
+        // Intake and handover share one lock, so a block of events is never interleaved with another caller's events.
+        lock (_gate)
         {
-            _buffer.Enqueue(new BufferedEvent(logEvent, now));
-            while (_buffer.Count > _maximumBufferCount)
+            var now = _timeProvider.GetTimestamp();
+            RemoveExpired(now);
+
+            if (logEvent.Level < _triggerLevel)
             {
-                _buffer.Dequeue();
+                _buffer.Enqueue(new BufferedEvent(logEvent, now));
+                while (_buffer.Count > _maximumBufferCount)
+                {
+                    _buffer.Dequeue();
+                }
+
+                return;
             }
 
-            return;
-        }
+            while (_buffer.Count > 0)
+            {
+                TryEmit(_buffer.Dequeue().Event);
+            }
 
-        while (_buffer.Count > 0)
-        {
-            TryEmit(_buffer.Dequeue().Event);
+            TryEmit(logEvent);
         }
-
-        TryEmit(logEvent);
     }
 
     private void TryEmit(LogEvent logEvent)

@@ -283,6 +283,119 @@ public class TriggerBufferTests
     }
 
     [Fact]
+    public async Task A_blocked_target_makes_the_trigger_wait_and_blocks_never_interleave()
+    {
+        var target = new BlockingSink(blockOnMessage: "context 1");
+        using var logger = new LoggerConfiguration()
+            .MinimumLevel.Verbose()
+            .WriteTo.TriggerBuffer(t => t.Sink(target))
+            .CreateLogger();
+        logger.Information("context 1");
+        logger.Information("context 2");
+
+        var cancellation = TestContext.Current.CancellationToken;
+        var first = Task.Run(() => logger.Error("trigger A"), cancellation);
+        target.Entered.Wait(TimeSpan.FromSeconds(10), cancellation).ShouldBeTrue();
+
+        var second = Task.Run(
+            () =>
+            {
+                logger.Information("context B");
+                logger.Error("trigger B");
+            },
+            cancellation);
+
+        // Give the second caller the chance to overlap with the block that is being handed over.
+        await Task.WhenAny(second, Task.Delay(TimeSpan.FromMilliseconds(300), cancellation));
+        first.IsCompleted.ShouldBeFalse("the triggering call returns only after the handover");
+
+        target.Release.Set();
+        await Task.WhenAll(first, second);
+
+        target.Messages.ShouldBe(["context 1", "context 2", "trigger A", "context B", "trigger B"]);
+    }
+
+    [Fact]
+    public async Task Parallel_intake_and_triggers_neither_duplicate_nor_lose_events()
+    {
+        const int threadCount = 8;
+        const int eventsPerThread = 500;
+        const int triggerEvery = 25;
+
+        var target = new CollectingSink();
+        using var logger = new LoggerConfiguration()
+            .MinimumLevel.Verbose()
+            .WriteTo.TriggerBuffer(t => t.Sink(target), maximumBufferCount: 100_000)
+            .CreateLogger();
+
+        // All threads wait on one gate, so that they start logging at the same moment.
+        using var startGate = new ManualResetEventSlim(false);
+        var workers = Enumerable.Range(0, threadCount).Select(thread => Task.Factory.StartNew(
+            () =>
+            {
+                startGate.Wait(TestContext.Current.CancellationToken);
+                for (var i = 0; i < eventsPerThread; i++)
+                {
+                    if (i % triggerEvery == triggerEvery - 1)
+                    {
+                        logger.Error("{Thread}-{Index}", thread, i);
+                    }
+                    else
+                    {
+                        logger.Information("{Thread}-{Index}", thread, i);
+                    }
+                }
+            },
+            TestContext.Current.CancellationToken,
+            TaskCreationOptions.LongRunning,
+            TaskScheduler.Default)).ToArray();
+
+        startGate.Set();
+        await Task.WhenAll(workers);
+        logger.Error("final trigger");
+
+        var delivered = target.Events;
+        var messages = delivered.Select(e => e.RenderMessage()).ToArray();
+
+        // Every event arrives exactly once: the context of the final trigger completes the last open block.
+        messages.Length.ShouldBe((threadCount * eventsPerThread) + 1);
+        messages.Distinct().Count().ShouldBe(messages.Length);
+
+        // Events of one thread keep their order, and every block ends with its trigger event.
+        for (var thread = 0; thread < threadCount; thread++)
+        {
+            var indexes = messages
+                .Where(m => m.StartsWith($"{thread}-", StringComparison.Ordinal))
+                .Select(m => int.Parse(m[(m.IndexOf('-') + 1)..], System.Globalization.CultureInfo.InvariantCulture))
+                .ToArray();
+            indexes.ShouldBe(indexes.Order().ToArray());
+        }
+
+        delivered[^1].Level.ShouldBe(LogEventLevel.Error);
+        delivered.Count(e => e.Level == LogEventLevel.Error)
+            .ShouldBe((threadCount * (eventsPerThread / triggerEvery)) + 1);
+    }
+
+    [Fact]
+    public void An_event_logged_back_into_the_same_sink_from_the_target_is_ignored_and_reported()
+    {
+        var target = new ReentrantSink();
+        using var selfLog = new SelfLogCapture();
+        using var logger = new LoggerConfiguration()
+            .MinimumLevel.Verbose()
+            .WriteTo.TriggerBuffer(t => t.Sink(target))
+            .CreateLogger();
+        target.Logger = logger;
+
+        logger.Information("context");
+        logger.Error("trigger");
+        logger.Error("second trigger");
+
+        target.Messages.ShouldBe(["context", "trigger", "second trigger"]);
+        selfLog.Messages.ShouldContain(message => message.Contains("TriggerBuffer"));
+    }
+
+    [Fact]
     public void A_missing_target_configuration_is_rejected()
     {
         // The null literal is intentional: it is the invalid input under test.
