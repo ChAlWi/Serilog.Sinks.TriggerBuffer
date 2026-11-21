@@ -1,10 +1,11 @@
 name: CI
 
 # Jeder Push auf einen Branch außer main wird gebaut und getestet.
-#   release/<x.y.z>  -> RC     (<x.y.z>-rc.<run>)       auf nuget.org veröffentlicht
-#   develop          -> Beta   (<nächster Patch>-beta.<run>) auf nuget.org veröffentlicht
-#   alle anderen     -> Alpha  (<nächster Patch>-alpha.<run>) nur als Workflow-Artefakt
-# Release (ohne Suffix) entsteht in main.yml beim Merge von release/* nach main.
+#   release/<x.y.z>  -> RC     (<x.y.z>-rc.<run>)
+#   develop          -> Beta   (<nächster Patch>-beta.<run>)
+#   alle anderen     -> Alpha  (<nächster Patch>-alpha.<run>)
+# Das Paket wird nur als Workflow-Artefakt bereitgestellt. Auf nuget.org gelangt
+# ausschließlich das Release aus main.yml (Merge von release/* nach main).
 on:
   push:
     branches-ignore:
@@ -40,7 +41,6 @@ jobs:
               exit 1
             fi
             VERSION="$BASE-rc.$RUN"
-            PUBLISH=true
           else
             # Basis: nächster Patch nach dem letzten Release-Tag (ohne Tag: 0.1.0)
             LAST=$(git tag --list '[0-9]*.[0-9]*.[0-9]*' --sort=-v:refname | head -n1)
@@ -52,15 +52,12 @@ jobs:
             fi
             if [ "$BRANCH" == "develop" ]; then
               VERSION="$BASE-beta.$RUN"
-              PUBLISH=true
-            else
+              else
               VERSION="$BASE-alpha.$RUN"
-              PUBLISH=false
             fi
           fi
           echo "version=$VERSION" >> "$GITHUB_OUTPUT"
-          echo "publish=$PUBLISH" >> "$GITHUB_OUTPUT"
-          echo "Version: $VERSION (veröffentlichen: $PUBLISH)"
+          echo "Version: $VERSION"
 
       - uses: actions/setup-dotnet@v4
         with:
@@ -92,13 +89,3 @@ jobs:
         with:
           name: Serilog.Sinks.TriggerBuffer.${{ steps.version.outputs.version }}
           path: artifacts/*
-
-      - name: Vorabversion (Beta/RC) auf nuget.org veröffentlichen
-        if: steps.version.outputs.publish == 'true'
-        env:
-          NUGET_API_KEY: ${{ secrets.NUGET_API_KEY }}
-        run: >
-          dotnet nuget push "artifacts/*.nupkg"
-          --source https://api.nuget.org/v3/index.json
-          --api-key "$NUGET_API_KEY"
-          --skip-duplicate

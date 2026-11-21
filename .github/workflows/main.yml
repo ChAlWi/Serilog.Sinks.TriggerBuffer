@@ -12,13 +12,17 @@ concurrency:
   group: main
   cancel-in-progress: false
 
-permissions:
-  contents: write         # Tag + GitHub Release
-  pull-requests: read     # zugehörigen Pull Request des Merges ermitteln
+permissions: {}
 
 jobs:
   build:
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: read   # zugehörigen Pull Request des Merges ermitteln
+    outputs:
+      is_release: ${{ steps.release.outputs.is_release }}
+      version: ${{ steps.release.outputs.version }}
     steps:
       - uses: actions/checkout@v4
 
@@ -78,25 +82,52 @@ jobs:
           -p:Version=${{ steps.release.outputs.version }}
           --output ./artifacts
 
-      - name: Auf nuget.org veröffentlichen
+      - uses: actions/upload-artifact@v4
         if: steps.release.outputs.is_release == 'true'
-        env:
-          NUGET_API_KEY: ${{ secrets.NUGET_API_KEY }}
+        with:
+          name: Serilog.Sinks.TriggerBuffer.${{ steps.release.outputs.version }}
+          path: artifacts/*
+          if-no-files-found: error
+
+  publish:
+    needs: build
+    if: needs.build.outputs.is_release == 'true'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write       # Tag + GitHub Release
+      id-token: write       # OIDC-Token für Trusted Publishing auf nuget.org
+    environment: production   # muss zur Umgebung der Trusted-Publishing-Richtlinie auf nuget.org passen
+    env:
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      GH_REPO: ${{ github.repository }}
+      VERSION: ${{ needs.build.outputs.version }}
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: Serilog.Sinks.TriggerBuffer.${{ needs.build.outputs.version }}
+          path: artifacts
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 8.0.x
+
+      - name: NuGet Login (OIDC -> temporärer API-Key)
+        id: login
+        uses: NuGet/login@v1
+        with:
+          user: ${{ secrets.NUGET_USER }}
+
+      - name: Auf nuget.org veröffentlichen
         run: >
           dotnet nuget push "artifacts/*.nupkg"
           --source https://api.nuget.org/v3/index.json
-          --api-key "$NUGET_API_KEY"
+          --api-key "${{ steps.login.outputs.NUGET_API_KEY }}"
           --skip-duplicate
 
       - name: Tag und GitHub Release anlegen
-        if: steps.release.outputs.is_release == 'true'
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          VERSION: ${{ steps.release.outputs.version }}
         run: |
           if gh release view "$VERSION" >/dev/null 2>&1; then
             echo "Release $VERSION existiert bereits – übersprungen."
           else
-            gh release create "$VERSION" artifacts/* \
-              --target "$GITHUB_SHA" --title "$VERSION" --generate-notes
+            gh release create "$VERSION" artifacts/*               --target "$GITHUB_SHA" --title "$VERSION" --generate-notes
           fi
