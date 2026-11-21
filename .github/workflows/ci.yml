@@ -1,0 +1,91 @@
+name: CI
+
+# Jeder Push auf einen Branch außer main wird gebaut und getestet.
+#   release/<x.y.z>  -> RC     (<x.y.z>-rc.<run>)
+#   develop          -> Beta   (<nächster Patch>-beta.<run>)
+#   alle anderen     -> Alpha  (<nächster Patch>-alpha.<run>)
+# Das Paket wird nur als Workflow-Artefakt bereitgestellt. Auf nuget.org gelangt
+# ausschließlich das Release aus main.yml (Merge von release/* nach main).
+on:
+  push:
+    branches-ignore:
+      - main
+    tags-ignore:
+      - '**'
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0   # Tags werden für die Basisversion benötigt
+
+      - name: Version bestimmen
+        id: version
+        env:
+          BRANCH: ${{ github.ref_name }}
+          RUN: ${{ github.run_number }}
+        run: |
+          if [[ "$BRANCH" == release/* ]]; then
+            BASE="${BRANCH#release/}"
+            if ! [[ "$BASE" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+              echo "::error::Ungültiger Release-Branch '$BRANCH'. Erwartet: release/MAJOR.MINOR.PATCH, z. B. release/1.0.0"
+              exit 1
+            fi
+            VERSION="$BASE-rc.$RUN"
+          else
+            # Basis: nächster Patch nach dem letzten Release-Tag (ohne Tag: 0.1.0)
+            LAST=$(git tag --list '[0-9]*.[0-9]*.[0-9]*' --sort=-v:refname | head -n1)
+            if [ -n "$LAST" ]; then
+              IFS=. read -r MA MI PA <<< "$LAST"
+              BASE="$MA.$MI.$((PA + 1))"
+            else
+              BASE="0.1.0"
+            fi
+            if [ "$BRANCH" == "develop" ]; then
+              VERSION="$BASE-beta.$RUN"
+              else
+              VERSION="$BASE-alpha.$RUN"
+            fi
+          fi
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "Version: $VERSION"
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: |
+            8.0.x
+            10.0.x
+
+      - name: Restore
+        run: dotnet restore Serilog.Sinks.TriggerBuffer.slnx
+
+      - name: Build
+        run: >
+          dotnet build Serilog.Sinks.TriggerBuffer.slnx
+          --configuration Release --no-restore
+          -p:Version=${{ steps.version.outputs.version }}
+          -p:ContinuousIntegrationBuild=true
+
+      - name: Test
+        run: dotnet test --solution Serilog.Sinks.TriggerBuffer.slnx --configuration Release --no-build
+
+      - name: Pack
+        run: >
+          dotnet pack src/Serilog.Sinks.TriggerBuffer/Serilog.Sinks.TriggerBuffer.csproj
+          --configuration Release --no-build
+          -p:Version=${{ steps.version.outputs.version }}
+          --output ./artifacts
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Serilog.Sinks.TriggerBuffer.${{ steps.version.outputs.version }}
+          path: artifacts/*
