@@ -1,0 +1,102 @@
+name: Main
+
+# Push auf main. Stammt der Push aus dem Merge eines release/<x.y.z>-Branches,
+# wird die Version <x.y.z> gebaut, auf nuget.org veröffentlicht und als Tag
+# <x.y.z> plus GitHub Release gesetzt. Andere Pushes werden nur gebaut und getestet.
+on:
+  push:
+    branches:
+      - main
+
+concurrency:
+  group: main
+  cancel-in-progress: false
+
+permissions:
+  contents: write         # Tag + GitHub Release
+  pull-requests: read     # zugehörigen Pull Request des Merges ermitteln
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Release-Version ermitteln
+        id: release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          # 1. Pull Request, über den der Commit nach main kam (Merge, Squash, Rebase)
+          BRANCH=$(gh api "repos/$GITHUB_REPOSITORY/commits/$GITHUB_SHA/pulls" --jq '.[].head.ref' | grep -E '^release/' | head -n1 || true)
+          # 2. Fallback: lokaler Merge ("Merge branch 'release/1.0.0'")
+          if [ -z "$BRANCH" ]; then
+            BRANCH=$(git log -1 --format=%B | grep -oE 'release/[0-9A-Za-z._-]+' | head -n1 || true)
+          fi
+
+          if [ -z "$BRANCH" ]; then
+            echo "Kein Release-Merge – es wird nur gebaut und getestet."
+            echo "is_release=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          VERSION="${BRANCH#release/}"
+          if ! [[ "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "::error::Release-Branch '$BRANCH' hat keine gültige Version (erwartet: release/MAJOR.MINOR.PATCH)."
+            exit 1
+          fi
+          echo "is_release=true" >> "$GITHUB_OUTPUT"
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "Release-Version: $VERSION (aus $BRANCH)"
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: |
+            8.0.x
+            10.0.x
+
+      - name: Restore
+        run: dotnet restore Serilog.Sinks.TriggerBuffer.slnx
+
+      - name: Build
+        env:
+          VERSION: ${{ steps.release.outputs.version }}
+        run: >
+          dotnet build Serilog.Sinks.TriggerBuffer.slnx
+          --configuration Release --no-restore
+          -p:ContinuousIntegrationBuild=true
+          ${VERSION:+-p:Version=$VERSION}
+
+      - name: Test
+        run: dotnet test --solution Serilog.Sinks.TriggerBuffer.slnx --configuration Release --no-build
+
+      - name: Pack
+        if: steps.release.outputs.is_release == 'true'
+        run: >
+          dotnet pack src/Serilog.Sinks.TriggerBuffer/Serilog.Sinks.TriggerBuffer.csproj
+          --configuration Release --no-build
+          -p:Version=${{ steps.release.outputs.version }}
+          --output ./artifacts
+
+      - name: Auf nuget.org veröffentlichen
+        if: steps.release.outputs.is_release == 'true'
+        env:
+          NUGET_API_KEY: ${{ secrets.NUGET_API_KEY }}
+        run: >
+          dotnet nuget push "artifacts/*.nupkg"
+          --source https://api.nuget.org/v3/index.json
+          --api-key "$NUGET_API_KEY"
+          --skip-duplicate
+
+      - name: Tag und GitHub Release anlegen
+        if: steps.release.outputs.is_release == 'true'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          VERSION: ${{ steps.release.outputs.version }}
+        run: |
+          if gh release view "$VERSION" >/dev/null 2>&1; then
+            echo "Release $VERSION existiert bereits – übersprungen."
+          else
+            gh release create "$VERSION" artifacts/* \
+              --target "$GITHUB_SHA" --title "$VERSION" --generate-notes
+          fi

@@ -4,10 +4,23 @@
     <TargetFramework>net8.0</TargetFramework>
     <PackageId>Serilog.Sinks.TriggerBuffer</PackageId>
     <Description>Buffers recent log events and forwards them to a target sink when a trigger level is reached.</Description>
+    <Authors>Christian Alt-Wibbing</Authors>
+    <PackageTags>serilog;sink;logging;buffer;trigger</PackageTags>
+    <PackageLicenseExpression>MIT</PackageLicenseExpression>
+    <PackageReadmeFile>README.md</PackageReadmeFile>
+    <RepositoryUrl>https://github.com/ChAlWi/Serilog.Sinks.TriggerBuffer</RepositoryUrl>
+    <RepositoryType>git</RepositoryType>
+    <PublishRepositoryUrl>true</PublishRepositoryUrl>
+    <IncludeSymbols>true</IncludeSymbols>
+    <SymbolPackageFormat>snupkg</SymbolPackageFormat>
   </PropertyGroup>
 
   <ItemGroup>
     <PackageReference Include="Serilog" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <None Include="..\..\README.md" Pack="true" PackagePath="\" />
   </ItemGroup>
 
   <ItemGroup>
