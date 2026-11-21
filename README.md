@@ -1,5 +1,9 @@
 # Serilog.Sinks.TriggerBuffer
 
+[![CI](https://github.com/ChAlWi/Serilog.Sinks.TriggerBuffer/actions/workflows/ci.yml/badge.svg?branch=develop)](https://github.com/ChAlWi/Serilog.Sinks.TriggerBuffer/actions/workflows/ci.yml)
+[![Main](https://github.com/ChAlWi/Serilog.Sinks.TriggerBuffer/actions/workflows/main.yml/badge.svg?branch=main)](https://github.com/ChAlWi/Serilog.Sinks.TriggerBuffer/actions/workflows/main.yml)
+[![NuGet](https://img.shields.io/nuget/vpre/Serilog.Sinks.TriggerBuffer)](https://www.nuget.org/packages/Serilog.Sinks.TriggerBuffer)
+
 A Serilog sink that keeps recent low-level log events in memory and forwards them to a target sink only when an event
 at a trigger level (by default `Error`) arrives. During normal operation the target receives nothing from the buffered
 levels. When something goes wrong, it receives the context that led up to the error, followed by the error itself.
