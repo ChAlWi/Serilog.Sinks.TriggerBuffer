@@ -90,7 +90,7 @@ jobs:
 
       - uses: actions/upload-artifact@v4
         with:
-          name: nuget-package-${{ steps.version.outputs.version }}
+          name: Serilog.Sinks.TriggerBuffer.${{ steps.version.outputs.version }}
           path: artifacts/*
 
       - name: Vorabversion (Beta/RC) auf nuget.org veröffentlichen
