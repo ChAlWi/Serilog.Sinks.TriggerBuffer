@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using Serilog.Events;
 
 namespace Serilog.Sinks.TriggerBuffer.Benchmarks;
@@ -20,6 +21,10 @@ internal static class Verifier
         {
             CheckProfile(profile, failures);
         }
+
+        CheckSlowTargetWaitsAtLeastItsDelay(failures);
+        CheckHistogramPercentilesAndMaximum(failures);
+        CheckSlowTargetScenarioRunsEndToEnd(failures);
 
         if (failures.Count == 0)
         {
@@ -70,6 +75,91 @@ internal static class Verifier
         }
 
         CheckOrderIds(target, [2, 3, 4, 99], "a full buffer keeps the newest events", failures);
+    }
+
+    private static void CheckSlowTargetWaitsAtLeastItsDelay(List<string> failures)
+    {
+        const int events = 20;
+        var delay = TimeSpan.FromMicroseconds(200);
+        var target = new SlowTargetSink(delay);
+        using var logger = BenchmarkLoggers.CreatePlain(ContextProfile.None, target);
+
+        var stopwatch = Stopwatch.StartNew();
+        for (var i = 0; i < events; i++)
+        {
+            logger.Debug(BenchmarkLoggers.Template, i, "Contoso", 17);
+        }
+
+        stopwatch.Stop();
+
+        if (target.EmittedCount != events)
+        {
+            failures.Add($"slow target: expected {events} events, got {target.EmittedCount}");
+        }
+
+        if (stopwatch.Elapsed < delay * events)
+        {
+            failures.Add($"slow target: {events} events took {stopwatch.Elapsed.TotalMilliseconds:0.00} ms, "
+                + $"less than the configured {(delay * events).TotalMilliseconds:0.00} ms");
+        }
+    }
+
+    private static void CheckHistogramPercentilesAndMaximum(List<string> failures)
+    {
+        var histogram = new LatencyHistogram();
+        for (var i = 0; i < 100; i++)
+        {
+            histogram.Record(1000);
+        }
+
+        histogram.Record(5_000_000);
+
+        var median = histogram.Percentile(50);
+        if (median is < 1000 or > 1125)
+        {
+            failures.Add($"histogram: the median of 100 x 1000 ns and one outlier is {median} ns, expected 1000-1125");
+        }
+
+        if (histogram.MaxNanoseconds != 5_000_000 || histogram.Percentile(100) != 5_000_000)
+        {
+            failures.Add("histogram: the maximum is not exact");
+        }
+
+        if (histogram.Count != 101)
+        {
+            failures.Add($"histogram: expected 101 samples, got {histogram.Count}");
+        }
+    }
+
+    private static void CheckSlowTargetScenarioRunsEndToEnd(List<string> failures)
+    {
+        var config = new SlowTargetConfig(
+            TimeSpan.FromMicroseconds(20),
+            TimeSpan.FromMilliseconds(600),
+            TimeSpan.FromMilliseconds(150),
+            TimeSpan.FromMilliseconds(200),
+            LogThreads: 2,
+            EventsPerSecondPerThread: 2000,
+            BufferSize: 50);
+
+        var result = SlowTargetScenario.Execute(config);
+
+        if (result.Triggers < 1)
+        {
+            failures.Add("scenario D: no trigger was sent");
+        }
+
+        if (result.LogLatency.Count != result.EventsLogged || result.EventsLogged < 1)
+        {
+            failures.Add(
+                $"scenario D: {result.EventsLogged} events logged, {result.LogLatency.Count} latencies recorded");
+        }
+
+        // Every trigger hands over its own event, so the target has to have received at least one event per trigger.
+        if (result.TargetEvents < result.Triggers)
+        {
+            failures.Add($"scenario D: {result.Triggers} triggers but only {result.TargetEvents} events at the target");
+        }
     }
 
     private static void CheckOrderIds(RecordingSink target, int[] expected, string check, List<string> failures)
