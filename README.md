@@ -227,9 +227,10 @@ local buffer files are approved for it.
 - No crash safety: buffered context that has not been triggered does not survive a process crash.
 - No hard memory limit, see "Limits".
 - No guarantee of delivery to an HTTP endpoint. That is the job of the target.
-- No measured performance. Keeping overhead low is a design goal, but there are no benchmarks and no latency or
-  throughput promises. The synchronous handover can block logging calls, and how long depends on the number and size
-  of the events and on the target.
+- No performance promise. Keeping overhead low is a design goal. A benchmark project exists, and
+  [`docs/benchmarks.md`](docs/benchmarks.md) describes the method and lists the results that have been measured. They
+  are measurements on one machine, not a guarantee. The synchronous handover can block logging calls, and how long
+  depends on the number and size of the events and on the target.
 - No per-request, trace or correlation buffers, no manual flush, no follow-up phase, no throttling.
 
 ## Supported versions
