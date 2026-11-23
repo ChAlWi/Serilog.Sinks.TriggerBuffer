@@ -60,3 +60,6 @@ nunit-*.xml
 .vs/
 CLAUDE.md
 CLAUDE.local.md
+
+# BenchmarkDotNet output
+BenchmarkDotNet.Artifacts/

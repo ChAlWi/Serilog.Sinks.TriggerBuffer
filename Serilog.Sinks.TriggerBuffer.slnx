@@ -2,6 +2,11 @@
   <Folder Name="/src/">
     <Project Path="src/Serilog.Sinks.TriggerBuffer/Serilog.Sinks.TriggerBuffer.csproj" />
   </Folder>
+  <Folder Name="/benchmark/">
+    <Project Path="benchmark/Serilog.Sinks.TriggerBuffer.Benchmarks/Serilog.Sinks.TriggerBuffer.Benchmarks.csproj">
+      <Build Project="false" />
+    </Project>
+  </Folder>
   <Folder Name="/test/">
     <Project Path="test/Serilog.Sinks.TriggerBuffer.Tests/Serilog.Sinks.TriggerBuffer.Tests.csproj" />
   </Folder>
