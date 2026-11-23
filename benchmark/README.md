@@ -45,8 +45,10 @@ dotnet run --project benchmark/Serilog.Sinks.TriggerBuffer.Benchmarks -c Release
 
 ## Before you measure
 
-Close other applications, use the "High performance" power plan and run on mains power. Scenario D needs at least six
-free cores. The conditions that a result must list are in [`docs/benchmarks.md`](../docs/benchmarks.md).
+Measure the way developers work: on mains power, with the default power plan and with the usual tools and containers
+running. Do not close applications or change the power plan to get cleaner numbers, but write down what was running.
+Use the default BenchmarkDotNet job, not `--job short`. Scenario D needs about six free cores, so check the CPU load
+before starting it. The conditions that a result must list are in [`docs/benchmarks.md`](../docs/benchmarks.md).
 
 BenchmarkDotNet writes its reports to a `BenchmarkDotNet.Artifacts` folder in the current directory. The folder is
 ignored by git.

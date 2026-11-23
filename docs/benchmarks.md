@@ -3,10 +3,10 @@
 These are **measurements, not a promise**. They show what the sink cost on one machine under the conditions listed
 with each result. The README makes no performance guarantee, and this document does not change that.
 
-> **Status (2026-11-23):** the benchmark project is complete and verified, but there is **no measurement under the
-> agreed conditions yet**. Only a short trial run on a machine that did not meet them (balanced power plan, other
-> applications running) has been made. Its numbers are not published here and do not decide anything. The sections
-> "Results" and "Decisions" stay empty until a proper run exists.
+> **Status (2026-11-23):** the benchmark project is complete and verified, but there is **no full measurement yet**.
+> Only a short trial run has been made (BenchmarkDotNet `--job short`, three iterations, one run of scenario D with
+> three triggers per delay). Its numbers are not published here and do not decide anything. The sections "Results"
+> and "Decisions" stay empty until a full run exists.
 
 ## Why
 
@@ -93,8 +93,18 @@ A result is only comparable under the same conditions. Every published result li
 - power plan and power source
 - what else was running
 
-The agreed conditions are: Release build, power plan "High performance", mains power, no other load (close the IDE,
-browsers and chat clients, no virus scan running). For D, run three times and show the runs side by side.
+The measurements are meant to show what a developer sees on an ordinary machine, not the best case. Developers
+usually start the application locally, often in their own Docker containers, with an IDE, a browser and a chat client
+open. The agreed conditions are therefore: Release build, mains power, the default power plan ("Balanced") and a
+typical developer workload running (IDE, browser, chat client, and the containers that are usually running).
+
+The load cannot be reproduced exactly. So every result states what was running (applications, containers) and roughly
+how busy the CPU was before the run. Do not close applications to get cleaner numbers, and do not change the power
+plan. Use the default BenchmarkDotNet job, not `--job short`. For D, run three times and show the runs side by side.
+Scenario D needs about six free cores, so check the CPU load before starting it.
+
+A quiet machine can be used as an additional reference, but it is labeled as such and is not compared with the other
+results.
 
 ## Thresholds and noise
 
@@ -107,12 +117,15 @@ Fixed before measuring, so that the numbers cannot be read to fit a wish afterwa
   the reference run.
 - **Noise:** a difference counts only if it is larger than twice the reported error and at least 5 %. If the error on
   the hot path is larger than 5 %, the limit is set again after the first measurement and the change is written here.
+Under a realistic workload the error will often be larger, so expect to repeat runs or raise the iteration count
+before a difference passes this rule. Do not relax the rule just to get a result.
 
-For a before and after comparison of a later change, run both states on the same machine back to back.
+For a before and after comparison of a later change, run both states on the same machine back to back, with the same
+workload.
 
 ## Results
 
-No measurement under the agreed conditions yet.
+No full measurement yet.
 
 ## Decisions
 
