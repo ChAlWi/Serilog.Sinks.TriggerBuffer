@@ -227,9 +227,10 @@ local buffer files are approved for it.
 - No crash safety: buffered context that has not been triggered does not survive a process crash.
 - No hard memory limit, see "Limits".
 - No guarantee of delivery to an HTTP endpoint. That is the job of the target.
-- No measured performance. Keeping overhead low is a design goal, but there are no benchmarks and no latency or
-  throughput promises. The synchronous handover can block logging calls, and how long depends on the number and size
-  of the events and on the target.
+- No performance promise. Keeping overhead low is a design goal. A benchmark project exists, and
+  [`docs/benchmarks.md`](docs/benchmarks.md) describes the method and lists the results that have been measured. They
+  are measurements on one machine, not a guarantee. The synchronous handover can block logging calls, and how long
+  depends on the number and size of the events and on the target.
 - No per-request, trace or correlation buffers, no manual flush, no follow-up phase, no throttling.
 
 ## Supported versions
@@ -251,6 +252,13 @@ dotnet test
 
 The tests run through the public Serilog configuration with a recording target sink. Decisions about dependencies are
 documented as ADRs in [`docs/adr`](docs/adr). A new package needs an ADR first.
+
+## Benchmarks
+
+The repository has a benchmark project for measuring what the sink costs: [`benchmark`](benchmark). How to run it is
+described there. The method, the measurement conditions and the results that have been measured are in
+[`docs/benchmarks.md`](docs/benchmarks.md). The benchmark project is not part of `dotnet test` or the CI build, and the
+results are measurements on one machine, not a performance promise.
 
 ## License
 

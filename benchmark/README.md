@@ -1,0 +1,55 @@
+# Benchmarks
+
+This folder holds the benchmark project `Serilog.Sinks.TriggerBuffer.Benchmarks`. It measures what the trigger buffer
+costs compared with a logger that has a sink that does nothing.
+
+The method, the scenarios, the measurement conditions, the thresholds and the results are described in
+[`docs/benchmarks.md`](../docs/benchmarks.md). Read that first. The numbers are measurements on one machine, not a
+performance promise.
+
+## What is here
+
+| Part | Purpose |
+| --- | --- |
+| BenchmarkDotNet scenarios | Baseline (`BaselineBenchmarks`), hot path (`HotPathBenchmarks`), contention (`ContentionBenchmarks`) and trigger cost (`TriggerBenchmarks`) |
+| Control `RetainOnly` | In the hot path and contention scenarios: a sink that only keeps the last events, to separate the cost of retaining events from the sink's own logic (`RetainingSink`) |
+| Scenario D | Slow target, a custom measurement (`SlowTargetScenario`), started with `--slow-target` |
+| `--verify` | Checks that the scenarios measure what they claim to, without measuring anything |
+
+The project is part of the solution file, but it is **not** restored, built or run by `dotnet build`, `dotnet test` or
+the CI workflow. It is run by hand in Release mode. Its only extra package is BenchmarkDotNet, see
+[ADR 0006](../docs/adr/0006-benchmarkdotnet-for-performance-measurement.md).
+
+## How to run
+
+Run these from the repository root. Always use `-c Release`.
+
+Check the scenarios (takes about a second):
+
+```powershell
+dotnet run --project benchmark/Serilog.Sinks.TriggerBuffer.Benchmarks -c Release -- --verify
+```
+
+Baseline, hot path, contention and trigger cost (BenchmarkDotNet, plan for an hour or more):
+
+```powershell
+dotnet run --project benchmark/Serilog.Sinks.TriggerBuffer.Benchmarks -c Release -- --filter "*Baseline*" "*HotPath*" "*Contention*" "*TriggerBenchmarks*"
+```
+
+Slow target (10 seconds per run, 3 runs per delay by default):
+
+```powershell
+dotnet run --project benchmark/Serilog.Sinks.TriggerBuffer.Benchmarks -c Release -- --slow-target
+```
+
+`--slow-target` accepts `--seconds <n>` and `--runs <n>`.
+
+## Before you measure
+
+Measure the way developers work: on mains power, with the default power plan and with the usual tools and containers
+running. Do not close applications or change the power plan to get cleaner numbers, but write down what was running.
+Use the default BenchmarkDotNet job, not `--job short`. Scenario D needs about six free cores, so check the CPU load
+before starting it. The conditions that a result must list are in [`docs/benchmarks.md`](../docs/benchmarks.md).
+
+BenchmarkDotNet writes its reports to a `BenchmarkDotNet.Artifacts` folder in the current directory. The folder is
+ignored by git.
