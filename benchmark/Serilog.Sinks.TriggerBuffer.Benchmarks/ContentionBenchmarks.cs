@@ -7,6 +7,10 @@ namespace Serilog.Sinks.TriggerBuffer.Benchmarks;
 /// Scenario B: the hot path with several threads logging at the same time. One invocation is
 /// <see cref="Threads"/> times <see cref="EventsPerThread"/> events, so the time per event is the reported time
 /// divided by that number. The reference is the same logger with a no-op sink.
+/// <para>
+/// <c>RetainOnly</c> is a control: a sink that only keeps the last events in a ring, without a lock. It shows how much
+/// of the cost comes from keeping events alive (garbage collection) and how much from the lock and the sink's logic.
+/// </para>
 /// </summary>
 [MemoryDiagnoser]
 public class ContentionBenchmarks
@@ -15,6 +19,7 @@ public class ContentionBenchmarks
     private const int BufferSize = 1000;
 
     private Logger _plain = null!;
+    private Logger _retaining = null!;
     private Logger _buffered = null!;
 
     [Params(1, 8)]
@@ -27,6 +32,7 @@ public class ContentionBenchmarks
     public void Setup()
     {
         _plain = BenchmarkLoggers.CreatePlain(Profile, new NullSink());
+        _retaining = BenchmarkLoggers.CreatePlain(Profile, new RetainingSink(BufferSize));
         _buffered = BenchmarkLoggers.CreateBuffered(Profile, new NullSink(), BufferSize);
     }
 
@@ -34,11 +40,15 @@ public class ContentionBenchmarks
     public void Cleanup()
     {
         _plain.Dispose();
+        _retaining.Dispose();
         _buffered.Dispose();
     }
 
     [Benchmark(Baseline = true)]
     public void NullSinkOnly() => LogFromThreads(_plain);
+
+    [Benchmark]
+    public void RetainOnly() => LogFromThreads(_retaining);
 
     [Benchmark]
     public void Buffered() => LogFromThreads(_buffered);

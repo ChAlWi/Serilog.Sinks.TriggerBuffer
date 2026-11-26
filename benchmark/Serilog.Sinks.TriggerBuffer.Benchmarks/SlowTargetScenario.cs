@@ -197,7 +197,8 @@ internal static class SlowTargetScenario
         }
     }
 
-    private static string Microseconds(double nanoseconds) => (nanoseconds / 1000.0).ToString("0.0", CultureInfo.InvariantCulture);
+    private static string Microseconds(double nanoseconds)
+        => (nanoseconds / 1000.0).ToString("0.0", CultureInfo.InvariantCulture);
 
     private static long ToTicks(TimeSpan time) => (long)(time.TotalSeconds * Stopwatch.Frequency);
 

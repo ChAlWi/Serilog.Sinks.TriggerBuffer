@@ -46,6 +46,12 @@ with the same logger and a sink that does nothing, so the numbers show what the 
 
 A to C run for the context profiles `None`, `Small`, `Medium` and `Large`. D runs without context.
 
+A and B also contain a **control**, `RetainOnly`: a sink that only keeps the last events in a ring (the size of the
+buffer) and does nothing else, with no lock, timestamp, expiry check or queue. Any buffer has at least this cost.
+Compared with the no-op sink it shows the price of keeping events alive, which is mostly garbage collection. Compared
+with the trigger buffer it shows what the sink's own logic (lock, timestamp, expiry, queue) adds. The control was
+added after the first measurement below, so that measurement does not contain it yet.
+
 ### Event
 
 One message template with three properties (`Loaded {OrderId} for {Customer} in {Elapsed} ms`), no exception, fixed

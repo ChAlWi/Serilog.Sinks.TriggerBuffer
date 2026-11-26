@@ -22,6 +22,7 @@ internal static class Verifier
             CheckProfile(profile, failures);
         }
 
+        CheckControlRetainsOnlyTheLastEvents(failures);
         CheckSlowTargetWaitsAtLeastItsDelay(failures);
         CheckHistogramPercentilesAndMaximum(failures);
         CheckSlowTargetScenarioRunsEndToEnd(failures);
@@ -75,6 +76,28 @@ internal static class Verifier
         }
 
         CheckOrderIds(target, [2, 3, 4, 99], "a full buffer keeps the newest events", failures);
+    }
+
+    private static void CheckControlRetainsOnlyTheLastEvents(List<string> failures)
+    {
+        var target = new RetainingSink(3);
+        using (var logger = BenchmarkLoggers.CreatePlain(ContextProfile.None, target))
+        {
+            for (var i = 0; i < 5; i++)
+            {
+                logger.Debug(BenchmarkLoggers.Template, i, "Contoso", 17);
+            }
+        }
+
+        var retained = target.Retained()
+            .Select(e => e.Properties["OrderId"] is ScalarValue { Value: int id } ? id : -1)
+            .Order()
+            .ToArray();
+
+        if (!retained.SequenceEqual([2, 3, 4]))
+        {
+            failures.Add($"control: expected the last 3 events [2, 3, 4], got [{string.Join(", ", retained)}]");
+        }
     }
 
     private static void CheckSlowTargetWaitsAtLeastItsDelay(List<string> failures)

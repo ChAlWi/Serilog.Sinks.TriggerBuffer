@@ -12,6 +12,7 @@ performance promise.
 | Part | Purpose |
 | --- | --- |
 | BenchmarkDotNet scenarios | Baseline (`BaselineBenchmarks`), hot path (`HotPathBenchmarks`), contention (`ContentionBenchmarks`) and trigger cost (`TriggerBenchmarks`) |
+| Control `RetainOnly` | In the hot path and contention scenarios: a sink that only keeps the last events, to separate the cost of retaining events from the sink's own logic (`RetainingSink`) |
 | Scenario D | Slow target, a custom measurement (`SlowTargetScenario`), started with `--slow-target` |
 | `--verify` | Checks that the scenarios measure what they claim to, without measuring anything |
 
